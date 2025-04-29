@@ -1,0 +1,84 @@
+# Filename: subsurface_visualizer.py
+
+import numpy as np
+import plotly.graph_objects as go
+from sklearn.cluster import KMeans
+import logging
+import os
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
+
+class SubsurfaceVisualizer:
+    def __init__(self, nx=40, ny=40, nz=20, depth_max=50):
+        self.nx = nx
+        self.ny = ny
+        self.nz = nz
+        self.depth_max = depth_max
+        self.x = np.linspace(0, 100, nx)
+        self.y = np.linspace(0, 100, ny)
+        self.z = np.linspace(0, depth_max, nz)
+        self.X, self.Y, self.Z = np.meshgrid(self.x, self.y, self.z, indexing='ij')
+        logging.info("SubsurfaceVisualizer initialized.")
+
+    def generate_synthetic_data(self):
+        logging.info("Generating synthetic geological data...")
+        def geology_fn(x, y, z):
+            return (
+                np.sin(x / 15) * np.cos(y / 15) * np.exp(-z / 30) +
+                0.2 * np.random.normal(size=x.shape)
+            )
+        self.values = geology_fn(self.X, self.Y, self.Z)
+        return self.values
+
+    def segment_layers(self, n_clusters=4):
+        logging.info(f"Segmenting data into {n_clusters} geological classes using KMeans...")
+        flattened = self.values.flatten().reshape(-1, 1)
+        self.kmeans = KMeans(n_clusters=n_clusters, n_init=10, random_state=42)
+        self.labels = self.kmeans.fit_predict(flattened)
+        return self.labels
+
+    def plot_3d_scatter(self, use_segmentation=False, save_html=False, html_filename="subsurface_3d.html"):
+        logging.info("Preparing 3D visualization...")
+        x_flat = self.X.flatten()
+        y_flat = self.Y.flatten()
+        z_flat = self.Z.flatten()
+        color_values = self.labels if use_segmentation else self.values.flatten()
+
+        fig = go.Figure(data=go.Scatter3d(
+            x=x_flat,
+            y=y_flat,
+            z=-z_flat,
+            mode='markers',
+            marker=dict(
+                size=2.5,
+                color=color_values,
+                colorscale='Viridis' if not use_segmentation else 'Jet',
+                colorbar=dict(title="Cluster" if use_segmentation else "Value"),
+                opacity=0.8,
+            )
+        ))
+
+        fig.update_layout(
+            title="3D Subsurface Geological Visualization",
+            scene=dict(
+                xaxis_title='Longitude',
+                yaxis_title='Latitude',
+                zaxis_title='Depth (m)',
+                zaxis=dict(autorange='reversed'),
+            ),
+            margin=dict(l=0, r=0, t=40, b=0),
+        )
+
+        if save_html:
+            fig.write_html(html_filename)
+            logging.info(f"Interactive 3D visualization saved to {html_filename}")
+
+        fig.show()
+
+# --- Usage Example ---
+if __name__ == "__main__":
+    visualizer = SubsurfaceVisualizer(nx=60, ny=60, nz=30)
+    visualizer.generate_synthetic_data()
+    visualizer.segment_layers(n_clusters=5)
+    visualizer.plot_3d_scatter(use_segmentation=True, save_html=True)
